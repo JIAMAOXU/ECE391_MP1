@@ -87,10 +87,10 @@ mp1_rtc_tasklet:
 	call update_missiles
 
 	# (2) Redraw the bases - they may have been overwritten with missiles
-	call redraw_the_bases
+	# call redraw_the_bases
 
 	#	(3) Redraw the crosshairs - it may have been overwritten with missiles
-	call redraw_the_crosshairs
+	# call redraw_the_crosshairs
 
 	popl %edi
     popl %esi
@@ -120,40 +120,85 @@ update_missiles:
 	# initialize stack frame
 	pushl %ebp                 
 	movl %esp, %ebp
-
 	# protect callee-saved registers
 	pushl %ebx
 	pushl %esi
 	pushl %edi
 
 	missle_list_traversal:
-
 	# place start of missile list into ebx (cursor), and start traversal
-	movl mp1_missile_list %ebx
+	movl mp1_missile_list, %ebx
 
 	# compare ebx with 0 to see if finish the traversal
 	cmpl $0, %ebx
 	je traversal_done
 
-	# traversal start
+	# traversal not done, traversal start
 	# low 16 bits of x and y fields determine which of these sub-squares the missile is in
 	# high 16 bits of x and y determine the text-mode video location to draw the missile
 	movl 8(%ebp),%ecx
 
 	# load x value into edi
-	movl x(%ebx), %edi
+	movl X(%ebx), %edi
 	# shift edi right 16 bit to get x position
 	shrl $16, %edi
 
+	# BOUNC CHECK: x should be [0,24]
+	compl $0, %edi
+	jl erase_missle
+	compl $24, %edi
+	jg erase_missle
+
 	# load y value into edi
-	movl y(%ebx), %esi
+	movl Y(%ebx), %esi
 	# shift edi right 16 bit to get y position
 	shrl $16, %esi
 
+	# BOUND CHECK: x should be [0,24]
+	comp $0, %esi
+	jl erase_missle
+	compl $79, %esi
+	jg erase_missle
+
+	# EXPLOSION CHECK: check if missle is exploded
+	cmpl $0, EXPLODED(%ebx)
+	jne missle_exploded
 	
+	# DESTINATION CHECK: check if missle reach destination
+	cmpl DEST_X (%ecx), %edi
+	jne missle_flying
+	cmpl DEST_Y (%ecx), %esi
+	jne missle_flying
+
+	# missle x and y position same as destination, jump to missle exploded
+	jmp missle_exploded
+	
+	
+missle_flying: 
+# if not exploded, it means that missle if flying
+# update the x and y position based on vx and vy
+	movl VX()
 
 traversal_done:
 
+erase_missle: 
+
+# when missle exploded, call missle exploded function
+call_exploded: 
+	# push edx for argument: "missile *m" 
+	pushl %edx
+	call missle_exploded
+	popl %edx
+
+	# check the return value of explode function
+	compl $0, %eax
+	je explode_finish
+	jmp explosion_side_effect
+
+
+explode_finish: 
+
+explosion_side_effect: 
 
 mp1_ioctl_startgame:
 		ret
@@ -169,3 +214,9 @@ mp1_ioctl_getstatus:
 
 mp1_ioctl_endgame:
 		ret
+
+
+# TA questions
+# 1. mp1_poke has what function?
+# 2. check bound before update or after update? 
+# 3. How to draw explosion
