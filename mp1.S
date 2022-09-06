@@ -143,7 +143,7 @@ update_missiles:
 	# shift edi right 16 bit to get x position
 	shrl $16, %edi
 
-	# BOUNC CHECK: x should be [0,24]
+	# BOUND CHECK: x should be [0,24]
 	compl $0, %edi
 	jl erase_missle
 	compl $24, %edi
@@ -154,7 +154,7 @@ update_missiles:
 	# shift edi right 16 bit to get y position
 	shrl $16, %esi
 
-	# BOUND CHECK: x should be [0,24]
+	# BOUND CHECK: y should be [0,80]
 	comp $0, %esi
 	jl erase_missle
 	compl $79, %esi
@@ -177,9 +177,27 @@ update_missiles:
 missle_flying: 
 # if not exploded, it means that missle if flying
 # update the x and y position based on vx and vy
-	movl VX()
+
+# first remove the old missle image
+
+call erase_missle
+
+# draw the new missle image,update the new x, y information back to register
+# update X
+movl VX(%ecx), %edi # edi stores VX
+addl %edi, X(%ecx)	# update X
+shrl $16, %edi
+# update Y
+movl VY(%ecx), %esi # esi stores VY
+addl %esi, Y(%ecx)	# update Y
+shrl $16, %esi
+
+# Start drawing procedure
+
+
 
 traversal_done:
+
 
 erase_missle: 
 
@@ -195,10 +213,25 @@ call_exploded:
 	je explode_finish
 	jmp explosion_side_effect
 
-
+# tasklet decrement; when it reaches zero the explosion is over
 explode_finish: 
+# decrement 
+subl $1, EXPLODED(%ecx)
+cmpl $0, EXPLODED (%ecx)
+je erase_explosion
 
+erase_explosion:
+
+
+# Has to notify user if missle_explode changes game status
 explosion_side_effect: 
+# How many argument??
+	pushl xxxxx
+	pushl xxxxx
+	call mp1_notify_user
+	popl  xxxxx
+	popl  xxxxx
+	jmp explode_finish
 
 mp1_ioctl_startgame:
 		ret
