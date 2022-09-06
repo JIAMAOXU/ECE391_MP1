@@ -71,7 +71,33 @@ mp1_poke:
 
 .globl mp1_rtc_tasklet
 mp1_rtc_tasklet:
-		ret
+
+	# initialize stack frame
+	pushl %ebp                 
+	movl %esp, %ebp
+
+	# protect callee-saved registers
+	pushl %ebx
+	pushl %esi
+	pushl %edi
+
+	# (1) updates the list of missiles (implement this in update_missiles,
+	# below, and call it from here).
+	# Call function update the list of missles
+	call update_missiles
+
+	# (2) Redraw the bases - they may have been overwritten with missiles
+	call redraw_the_bases
+
+	#	(3) Redraw the crosshairs - it may have been overwritten with missiles
+	call redraw_the_crosshairs
+
+	popl %edi
+    popl %esi
+    popl %ebx
+    
+	leave
+	ret
 
 # int mp1_ioctl(unsigned long arg, unsigned int cmd)
 # The dispatch function for the MP1 ioctls - should use the cmd argument
@@ -89,8 +115,45 @@ mp1_ioctl:
 
 # ----------------- Functions private to this file -------------------
 
+
 update_missiles:
-		ret
+	# initialize stack frame
+	pushl %ebp                 
+	movl %esp, %ebp
+
+	# protect callee-saved registers
+	pushl %ebx
+	pushl %esi
+	pushl %edi
+
+	missle_list_traversal:
+
+	# place start of missile list into ebx (cursor), and start traversal
+	movl mp1_missile_list %ebx
+
+	# compare ebx with 0 to see if finish the traversal
+	cmpl $0, %ebx
+	je traversal_done
+
+	# traversal start
+	# low 16 bits of x and y fields determine which of these sub-squares the missile is in
+	# high 16 bits of x and y determine the text-mode video location to draw the missile
+	movl 8(%ebp),%ecx
+
+	# load x value into edi
+	movl x(%ebx), %edi
+	# shift edi right 16 bit to get x position
+	shrl $16, %edi
+
+	# load y value into edi
+	movl y(%ebx), %esi
+	# shift edi right 16 bit to get y position
+	shrl $16, %esi
+
+	
+
+traversal_done:
+
 
 mp1_ioctl_startgame:
 		ret
