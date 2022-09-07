@@ -191,6 +191,21 @@ missle_flying:
 	shrl $16, %esi
 
 	# Start drawing procedure
+<<<<<<< Updated upstream
+=======
+	# memory offset = x*2 + y*80*2
+	# calculate x*2
+	imull $2, %edi, %edi
+	# calculate y*80*2
+	imull $80, %esi, %esi
+	imull $2, %esi, %esi
+	# add  x*2 and y*80*2
+	addl %esi, %edi
+	# store memory offset in eax
+	movl %edi, %eax
+	movl 0x00, 
+	call mp1_poke
+>>>>>>> Stashed changes
 
 
 
