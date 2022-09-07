@@ -124,22 +124,20 @@ update_missiles:
 	pushl %ebx
 	pushl %esi
 	pushl %edi
-
-	missle_list_traversal:
-	# place start of missile list into ebx (cursor), and start traversal
-	movl mp1_missile_list, %ebx
-
+	# place start of missile list into ecx (cursor), and start traversal
+	movl mp1_missile_list, %ecx
 	# compare ebx with 0 to see if finish the traversal
-	cmpl $0, %ebx
+	cmpl $0, %ecx
 	je traversal_done
 
+missle_list_traversal:
 	# traversal not done, traversal start
 	# low 16 bits of x and y fields determine which of these sub-squares the missile is in
 	# high 16 bits of x and y determine the text-mode video location to draw the missile
 	movl 8(%ebp),%ecx
 
 	# load x value into edi
-	movl X(%ebx), %edi
+	movl X(%ecx), %edi
 	# shift edi right 16 bit to get x position
 	shrl $16, %edi
 
@@ -150,7 +148,7 @@ update_missiles:
 	jg erase_missle
 
 	# load y value into edi
-	movl Y(%ebx), %esi
+	movl Y(%ecx), %esi
 	# shift edi right 16 bit to get y position
 	shrl $16, %esi
 
@@ -161,7 +159,7 @@ update_missiles:
 	jg erase_missle
 
 	# EXPLOSION CHECK: check if missle is exploded
-	cmpl $0, EXPLODED(%ebx)
+	cmpl $0, EXPLODED(%ecx)
 	jne missle_exploded
 	
 	# DESTINATION CHECK: check if missle reach destination
@@ -175,31 +173,82 @@ update_missiles:
 	
 	
 missle_flying: 
-# if not exploded, it means that missle if flying
-# update the x and y position based on vx and vy
+	# if not exploded, it means that missle if flying
+	# update the x and y position based on vx and vy
 
-# first remove the old missle image
+	# first remove the old missle image
 
-call erase_missle
+	call erase_missle
 
-# draw the new missle image,update the new x, y information back to register
-# update X
-movl VX(%ecx), %edi # edi stores VX
-addl %edi, X(%ecx)	# update X
-shrl $16, %edi
-# update Y
-movl VY(%ecx), %esi # esi stores VY
-addl %esi, Y(%ecx)	# update Y
-shrl $16, %esi
+	# draw the new missle image,update the new x, y information back to register
+	# update X
+	movl VX(%ecx), %edi # edi stores VX
+	addl %edi, X(%ecx)	# update X
+	shrl $16, %edi
+	# update Y
+	movl VY(%ecx), %esi # esi stores VY
+	addl %esi, Y(%ecx)	# update Y
+	shrl $16, %esi
 
-# Start drawing procedure
+	# Start drawing procedure
 
 
 
 traversal_done:
+leave
+ret
 
 
-erase_missle: 
+erase_missle:
+	# initialize stack frame
+	pushl %ebp                 
+	movl %esp, %ebp
+	# protect callee-saved registers
+	pushl %eax
+	pushl %ebx
+	pushl %ecx
+	pushl %edx
+	pushl %esi
+	pushl %edi
+
+	# ebx is the previous pointer, ecx is the current pointer
+	# set up ebx:previous cursor
+	movl mp1_missile_list, %ebx
+	# compare previous cursor with the current cursor
+	compl %ebx, %ecx
+	# if equal means we are at list head
+	je erase_missle_head
+
+next_cursor:
+	# otherwise
+	# confirm we are at right missle to delete, ebx is the previous pointer
+	movl NEXT(%ebx), %edx
+	# edx now is the current cursor
+	comp %edx, %ecx
+	je erase
+	jmp next_cursor
+erase: 
+	# find next of the previous cursor = current cursor
+	movl NEXT(%ebx), %eax
+	# call void mp1_free(void *ptr), argument should be pointer
+	movl %eax, NEXT(%edx)
+	call mp1_free
+	leave
+	ret
+erase_head: 
+	movl NEXT(%ecx), %edx
+	movl %edx, mp1_missile_list
+	pushl %edx
+	pushl %ecx
+	call mp1_free
+	popl %ecx
+	popl %edx
+	movl mp1_missile_list, %ecx
+	leave
+	ret
+
+
+
 
 # when missle exploded, call missle exploded function
 call_exploded: 
