@@ -110,11 +110,27 @@ mp1_rtc_tasklet:
 
 .globl mp1_ioctl
 mp1_ioctl:
+
+		# load the input into esi
+		movl 8(%esp), %esi
+		cmpl $0, %eax
+		jb error
+		cmpl $4, %esi
+		ja error
+		jmp *jump_table(,%esi,4)
+
+error: 	
+		movl $-1, %esi			
 		ret
+
+jump_table:
+	.long mp1_ioctl_startgame, mp1_ioctl_addmissile, mp1_ioctl_movexhairs, mp1_ioctl_getstatus, mp1_ioctl_endgame
+	
+	
+	
 
 
 # ----------------- Functions private to this file -------------------
-
 
 update_missiles:
 	# initialize stack frame
@@ -142,9 +158,9 @@ missle_list_traversal:
 	shrl $16, %edi
 
 	# BOUND CHECK: x should be [0,24]
-	compl $0, %edi
+	cmpl $0, %edi
 	jl erase_missle
-	compl $24, %edi
+	cmpl $24, %edi
 	jg erase_missle
 
 	# load y value into edi
@@ -153,14 +169,14 @@ missle_list_traversal:
 	shrl $16, %esi
 
 	# BOUND CHECK: y should be [0,80]
-	comp $0, %esi
+	cmpl $0, %esi
 	jl erase_missle
-	compl $79, %esi
+	cmpl $79, %esi
 	jg erase_missle
 
 	# EXPLOSION CHECK: check if missle is exploded
 	cmpl $0, EXPLODED(%ecx)
-	jne missle_exploded
+	jne call_exploded
 	
 	# DESTINATION CHECK: check if missle reach destination
 	cmpl DEST_X (%ecx), %edi
@@ -169,28 +185,47 @@ missle_list_traversal:
 	jne missle_flying
 
 	# missle x and y position same as destination, jump to missle exploded
-	jmp missle_exploded
+	jmp call_exploded
 	
 	
 missle_flying: 
-	# if not exploded, it means that missle if flying
+	# not explod, it means that missle if flying
 	# update the x and y position based on vx and vy
 
 	# first remove the old missle image
+	push %eax
+	pushl %ecx
+	pushl %edx
+	movb C(%ecx), %cl
+	
+	call position_calculation
+	
+	call mp1_poke
+	popl %edx	
+	popl %ecx
+	popl %eax
 
-	call erase_missle
-
+position_calculation: 
 	# draw the new missle image,update the new x, y information back to register
 	# update X
-	movl VX(%ecx), %edi # edi stores VX
-	addl %edi, X(%ecx)	# update X
+	pushl %ebp
+	movl %esp, %ebp
+	pushl %ecx
+	pushl %edi
+	pushl %esi
+	# edi stores VX
+	movl VX(%ecx), %edi 
+	# update X
+	addl %edi, X(%ecx)	
 	shrl $16, %edi
-	# update Y
-	movl VY(%ecx), %esi # esi stores VY
-	addl %esi, Y(%ecx)	# update Y
-	shrl $16, %esi
 
-	# Start drawing procedure
+	# esi stores VY
+	movl VY(%ecx), %esi 
+	# update Y
+	addl %esi, Y(%ecx)	
+	shrl $16, %esi
+	
+	position_onscreen:
 	# memory offset = x*2 + y*80*2
 	# calculate x*2
 	imull $2, %edi, %edi
@@ -201,15 +236,19 @@ missle_flying:
 	addl %esi, %edi
 	# store memory offset in eax
 	movl %edi, %eax
-	movl 0x00, 
-	call mp1_poke
+	
 
-
+	popl %esi
+	popl %edi
+	popl %ecx
+	leave 
+	ret
 
 traversal_done:
 leave
 ret
 
+# ---------------------------------ERASE---------------------------------------#
 
 erase_missle:
 	# initialize stack frame
@@ -227,72 +266,140 @@ erase_missle:
 	# set up ebx:previous cursor
 	movl mp1_missile_list, %ebx
 	# compare previous cursor with the current cursor
-	compl %ebx, %ecx
-	# if equal means we are at list head
-	je erase_missle_head
+	cmpl %ebx, %ecx
+	# jump equal, we are at list head
+	je erase_head
 
 next_cursor:
 	# otherwise
 	# confirm we are at right missle to delete, ebx is the previous pointer
 	movl NEXT(%ebx), %edx
 	# edx now is the current cursor
-	comp %edx, %ecx
+	cmpl %edx, %ecx
 	je erase
 	jmp next_cursor
+	
 erase: 
 	# find next of the previous cursor = current cursor
 	movl NEXT(%ebx), %eax
 	# call void mp1_free(void *ptr), argument should be pointer
 	movl %eax, NEXT(%edx)
 	call mp1_free
+	popl %edi
+	popl %esi
+	popl %edx
+	popl %ecx
+	popl %ebx
+	popl %eax
 	leave
 	ret
+
 erase_head: 
 	movl NEXT(%ecx), %edx
 	movl %edx, mp1_missile_list
-	pushl %edx
-	pushl %ecx
 	call mp1_free
-	popl %ecx
+	popl %edi
+	popl %esi
 	popl %edx
+	popl %ecx
+	popl %ebx
+	popl %eax
 	movl mp1_missile_list, %ecx
 	leave
 	ret
 
 
-
+# ---------------------------------EXPLOSION---------------------------------------#
 
 # when missle exploded, call missle exploded function
 call_exploded: 
 	# push edx for argument: "missile *m" 
+	pushl %eax
+	pushl %ebx
+	pushl %ecx
 	pushl %edx
-	call missle_exploded
-	popl %edx
-
+	pushl %esi
+	pushl %edi
+	call missile_explode
+	pushl %edi
+	pushl %esi
+	pushl %edx
+	pushl %ecx
+	pushl %ebx
+	pushl %eax	
 	# check the return value of explode function
-	compl $0, %eax
-	je explode_finish
+	cmpl $0, %eax
+	je draw_explode
 	jmp explosion_side_effect
 
 # tasklet decrement; when it reaches zero the explosion is over
-explode_finish: 
-# decrement 
-subl $1, EXPLODED(%ecx)
-cmpl $0, EXPLODED (%ecx)
-je erase_explosion
+draw_explode: 
+	# decrement 
+	subl $1, EXPLODED(%ecx)
+	cmpl $0, EXPLODED (%ecx)
+	jle erase_explode
+	# memory offset = x*2 + y*80*2
+	# calculate x*2
+	imull $2, %edi, %edi
+	# calculate y*80*2
+	imull $80, %esi, %esi
+	imull $2, %esi, %esi
+	# add  x*2 and y*80*2
+	addl %esi, %edi
+	# store memory offset in eax
+	movl %edi, %eax
+	# draw explosion image
+	movb $64, %cl
+	pushl %edx
+	call mp1_poke
+	popl %edx
+	movl (%ecx),%ecx
+	compl $0, %ecx
+	je DONE
+	cmpl $0, EXPLODED(%ebx)		#if exploded = 0, missile has not exploded
+	jne missile_exploded
+	leave 
+	ret
+erase_explode:
+	# load x value into edi
+	movl X(%ecx), %edi
+	# shift edi right 16 bit to get x position
+	shrl $16, %edi
 
-erase_explosion:
+	# load y value into edi
+	movl Y(%ecx), %esi
+	# shift edi right 16 bit to get y position
+	shrl $16, %esi
 
+	# memory offset = x*2 + y*80*2
+	# calculate x*2
+	imull $2, %edi, %edi
+	# calculate y*80*2
+	imull $80, %esi, %esi
+	imull $2, %esi, %esi
+	# add  x*2 and y*80*2
+	addl %esi, %edi
+	# store memory offset in eax
+	movl %edi, %eax
+	movb $32, %cl
+	pushl %edx
+	call mp1_poke
+	popl %edx
+	jmp erase_missle
+
+DONE:
+leave
+ret
 
 # Has to notify user if missle_explode changes game status
 explosion_side_effect: 
 # How many argument??
-	pushl xxxxx
-	pushl xxxxx
-	call mp1_notify_user
-	popl  xxxxx
-	popl  xxxxx
-	jmp explode_finish
+	# pushl xxxxx
+	# pushl xxxxx
+	# call mp1_notify_user
+	# popl  xxxxx
+	# popl  xxxxx
+	# jmp explode_finish
 
 mp1_ioctl_startgame:
 		ret
@@ -309,8 +416,3 @@ mp1_ioctl_getstatus:
 mp1_ioctl_endgame:
 		ret
 
-
-# TA questions
-# 1. mp1_poke has what function?
-# 2. check bound before update or after update? 
-# 3. How to draw explosion
