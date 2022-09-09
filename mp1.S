@@ -7,7 +7,7 @@
     # Constants for accessing the fields of a struct missile, 
     # struct missile is defined in rtc.h and mp1.h
 
-	NEXT 	  = 0  # 
+	NEXT 	  = 0  
 	X	  = 4
 	Y	  = 8
 	VX	  = 12
@@ -77,7 +77,10 @@ mp1_rtc_tasklet:
 	movl %esp, %ebp
 
 	# protect callee-saved registers
+	pushl %eax
 	pushl %ebx
+	pushl %ecx
+	pushl %edx
 	pushl %esi
 	pushl %edi
 
@@ -91,11 +94,13 @@ mp1_rtc_tasklet:
 
 	#	(3) Redraw the crosshairs - it may have been overwritten with missiles
 	# call redraw_the_crosshairs
-
+	call redraw_the_crosshairs
 	popl %edi
     popl %esi
-    popl %ebx
-    
+    popl %edx
+    popl %ecx
+	popl %ebx
+	popl %eax
 	leave
 	ret
 
@@ -120,11 +125,11 @@ mp1_ioctl:
 		jmp *jump_table(,%esi,4)
 
 error: 	
-		movl $-1, %esi			
+		movl $-1, %eax			
 		ret
 
 jump_table:
-	.long mp1_ioctl_startgame, mp1_ioctl_addmissile, mp1_ioctl_movexhairs, mp1_ioctl_getstatus, mp1_ioctl_endgame
+	.long mp1_ioctl_startgame, mp1_ioctl_addmissile
 	
 	
 	
@@ -137,17 +142,20 @@ update_missiles:
 	pushl %ebp                 
 	movl %esp, %ebp
 	# protect callee-saved registers
-	pushl %ecx
+	pushl %eax
 	pushl %ebx
+	pushl %ecx
+	pushl %edx
 	pushl %esi
 	pushl %edi
 	# place start of missile list into ecx (cursor), and start traversal
 	movl mp1_missile_list, %ecx
 	# compare ebx with 0 to see if finish the traversal
-	cmpl $0, %ecx
-	je traversal_done
+
 
 missle_list_traversal:
+	cmpl $0, %ecx
+	je traversal_done
 	# traversal not done, traversal start
 	# low 16 bits of x and y fields determine which of these sub-squares the missile is in
 	# high 16 bits of x and y determine the text-mode video location to draw the missile
@@ -190,8 +198,10 @@ missle_list_traversal:
 	
 	popl %edi
 	popl %esi
-	popl %ebx
+	popl %edx
 	popl %ecx
+	popl %ebx
+	popl %eax
 	jmp traversal_done
 
 missle_flying: 
@@ -202,38 +212,42 @@ missle_flying:
 	# update the x and y position based on vx and vy
 
 	# first remove the old missle image
-	push %eax
+	pushl %eax
 	pushl %ecx
 	pushl %edx
 	# erase missle image
-	xorb %cl, %cl
-	call position_calculation
-	# draw missle 
-	movb C(%ecx), %cl
-	call mp1_poke
+	jmp position_calculation
+
+	# move on to next missile
+	movl NEXT (%ecx), %ecx
 	popl %edx	
 	popl %ecx
 	popl %eax
-
+	jmp missle_list_traversal
 position_calculation: 
 	# initialize stack frame
 	pushl %ebp
 	movl %esp, %ebp
 	# draw the new missle image,update the new x, y information back to register
 	# update X
+	pushl %eax
+	pushl %ebx
 	pushl %ecx
-	pushl %edi
+	pushl %edx
 	pushl %esi
+	pushl %edi
 	# edi stores VX
 	movl VX(%ecx), %edi 
 	# update X
 	addl X(%ecx), %edi
+	movl %edi, X(%ecx)
 	shrl $16, %edi
 
 	# esi stores VY
 	movl VY(%ecx), %esi 
 	# update Y
 	addl Y(%ecx), %esi	
+	movl %esi, Y(%ecx)
 	shrl $16, %esi
 	
 	position_onscreen:
@@ -247,16 +261,25 @@ position_calculation:
 	addl %esi, %edi
 	# store memory offset in eax
 	movl %edi, %eax
-	
-	popl %esi
-	popl %edi
+	# draw missle 
+	movb C(%ecx), %cl
+	pushl %ecx
+	call mp1_poke
 	popl %ecx
-	leave 
-	ret
+
+	popl %edi
+	popl %esi
+	popl %edx
+	popl %ecx
+	popl %ebx
+	popl %eax
+	jmp next_missile
+
 
 traversal_done:
 	leave
 	ret
+
 
 # ---------------------------------ERASE FROM LIST---------------------------------------#
 
@@ -268,7 +291,7 @@ erase_missle:
 	pushl %eax
 	pushl %ebx
 	pushl %ecx
-	pushl %edx
+	pushl %esi
 
 	# ebx is the previous pointer, ecx is the current pointer
 	# set up ebx:previous cursor
@@ -281,37 +304,49 @@ erase_missle:
 next_cursor:
 	# otherwise
 	# confirm we are at right missle to delete, ebx is the previous pointer
-	movl NEXT(%ebx), %edx
-	# edx now is the current cursor
-	cmpl %edx, %ecx
+	movl NEXT(%ebx), %esi
+	# esi now is the current cursor
+	cmpl %esi, %ecx
 	je erase
 	jmp next_cursor
 	
 erase: 
 	# find next of the previous cursor = current cursor
-	movl NEXT(%ebx), %eax
+	movl NEXT(%ecx), %eax
 	# call void mp1_free(void *ptr), argument should be pointer
-	movl %eax, NEXT(%edx)
-	pushl %edx
+	movl %eax, NEXT(%ebx)
+	# free the missile memory
+	pushl %ebx
+	pushl %eax
+	pushl %ecx
 	call mp1_free
+	popl %ecx
+	popl %eax
+	popl %ebx
 
-	popl %edx
+	
+	popl %esi
 	popl %ecx
 	popl %ebx
 	popl %eax
-	jmp update_missiles
+	jmp next_missile
 
 erase_head: 
 	movl NEXT(%ecx), %edx
 	movl %edx, mp1_missile_list
+	
+	pushl %edx
+	pushl %ecx
 	call mp1_free
-
+	popl %ecx
 	popl %edx
+
+	popl %esi
 	popl %ecx
 	popl %ebx
 	popl %eax
 	movl mp1_missile_list, %ecx
-	jmp update_missiles
+	jmp next_missile
 
 # ---------------------------------EXPLOSION---------------------------------------#
 
@@ -325,24 +360,44 @@ call_exploded:
 	pushl %esi
 	pushl %edi
 	call missile_explode
-	pushl %edi
-	pushl %esi
-	pushl %edx
-	pushl %ecx
-	pushl %ebx
-	pushl %eax	
+	popl %edi
+	popl %esi
+	popl %edx
+	popl %ecx
+	popl %ebx
+	popl %eax	
 	# check the return value of explode function
 	cmpl $0, %eax
 	je draw_explode
 	call mp1_notify_user
-	# jmp explosion_side_effect
+	
 
 # tasklet decrement; when it reaches zero the explosion is over
 draw_explode: 
+	pushl %eax
+	pushl %ebx
+	pushl %ecx
+	pushl %edx
+	pushl %esi
+	pushl %edi
+
 	# decrement 
 	subl $1, EXPLODED(%ecx)
 	cmpl $0, EXPLODED (%ecx)
 	jle erase_explode
+	# edi stores VX
+	movl VX(%ecx), %edi 
+	# update X
+	addl X(%ecx), %edi
+	movl %edi, X(%ecx)
+	shrl $16, %edi
+
+	# esi stores VY
+	movl VY(%ecx), %esi 
+	# update Y
+	addl Y(%ecx), %esi	
+	movl %esi, Y(%ecx)
+	shrl $16, %esi
 	# memory offset = x*2 + y*80*2
 	# calculate x*2
 	imull $2, %edi, %edi
@@ -355,10 +410,17 @@ draw_explode:
 	movl %edi, %eax
 	# draw explosion image
 	movb EXPLOSION(%ecx), %cl
+	movl EXPLODED (%ecx), %edx
 	pushl %edx
 	call mp1_poke
 	popl %edx
-	movl (%ecx),%ecx
+
+	popl %edi
+	popl %esi
+	popl %edx
+	popl %ecx
+	popl %ebx
+	popl %eax	
 	jmp next_missile
 
 next_missile:
@@ -387,19 +449,50 @@ erase_explode:
 	# store memory offset in eax
 	movl %edi, %eax
 	movb $32, %cl
+	movl EXPLODED (%ecx), %edx
 	pushl %edx
 	call mp1_poke
 	popl %edx
 	jmp erase_missle
 
-DONE:
+# -------------------------------Crosshair-----------------------------------#
+redraw_the_crosshairs: 
+	# initialize stack frame
+	pushl %ebp                 
+	movl %esp, %ebp
+	# protect callee-saved registers
+	pushl %esi
+	pushl %eax
+	# memory offset = x*2 + y*80*2
+	# esi stores x
+	movl crosshairs_x, %esi
+	# eax stores y
+	movl crosshairs_y, %eax
+	# x*80
+	imull $80, %eax
+	# x*80 + y
+	addl %esi, %eax
+	# (x*80 + y) 82
+	imull $2, %eax
+	# “+” = ascii 43
+	movb $43, %cl
+	call mp1_poke
+	popl %eax
+	popl %esi
 	leave
 	ret
 
-
 mp1_ioctl_startgame:
-	movl $0x00, mp1_missile_list
-	leave
+    pushl %ebp
+    movl %esp, %ebp
+    pushl %ebx
+    pushl %esi
+    pushl %edi
+	movl $0, mp1_missile_list
+	popl %edi
+    popl %esi
+    popl %ebx
+    leave
 	ret
 
 
@@ -413,33 +506,38 @@ mp1_ioctl_addmissile:
 	pushl %esi
 	pushl %edi
 
-	movl $33, %edi
 	movl 8(%ebp), %esi
 	# void* mp1 malloc(unsigned long size);
-	pushl %edi
+	# struct size = C + size (char) = 32 + 1 = 33
+	pushl $33
 	call mp1_malloc # eax point to new missle 
-	popl %edi
 
 	# mp1_copy_from_user (void *to, const void *from, unsigned long n)
 	# unsigned long n
-	push %edi
+	pushl $33
 	# const void *from
 	pushl %esi
 	# void *to = cursor for linked-list
-	pushl %ecx 
+	pushl %eax 
 	call mp1_copy_from_user
 	# eax point to new missle 
 	cmpl $0, %eax 
-	je copy_failed
+	# jne copy_failed
+	popl %eax
+	popl %esi
 
 	# add missile success
 	# edx is the start of the old list
-	movl mp1_missile_list, %edx 
+	push %eax
+	movl mp1_missile_list, %ecx 
 	# connect old list with eax
-	movl %edx, NEXT(%eax)
+	movl %ecx, NEXT(%eax)
+	# insert the new node in the head
 	movl %eax, mp1_missile_list
+	# no error, return 0
 	movl $0, %eax
-	
+	popl %eax 
+
 	popl %edi
 	popl %esi
 	popl %edx
@@ -449,10 +547,16 @@ mp1_ioctl_addmissile:
 	leave 
 	ret 
 copy_failed:
+	# const void *from
+	popl %esi
+	# void *to = cursor for linked-list
+	popl %eax
 	push %eax
 	call mp1_free
+	# copy error, return -1 to eax
 	movl $-1, %eax
 	
+	popl %eax
 	popl %edi
 	popl %esi
 	popl %edx
