@@ -462,14 +462,14 @@ check_city:
 	jne city_alive
 
 city_dead: 
-	movl dead_base_pic, %esi
+	movl $dead_base_pic, %esi
 	# each city has width of 5
 	movl $5, %edi
 	jmp draw_loop
 
 city_alive: 
 	# let esi point to the start of base_pic
-	movl base_pic, %esi
+	movl $base_pic, %esi
 	# each city has width of 5
 	movl $5, %edi
 	jmp draw_loop
