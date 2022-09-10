@@ -490,7 +490,7 @@ draw_loop:
 	# check if we reach the max width
 	cmpl $0, %edx
 	je one_city_done
-	draw_loop
+	jmp draw_loop
 
 one_city_done: 
 	cmp $0, %ecx
