@@ -477,7 +477,7 @@ city_alive:
 
 draw_loop: 
 	# load base_pic to cl and draw
-	movb %esi, %cl
+	movb NEXT(%esi), %cl
 	pushl %edx
 	call mp1_poke
 	popl %edx
