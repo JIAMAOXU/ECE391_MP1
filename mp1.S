@@ -75,26 +75,26 @@ mp1_poke:
 
 .globl mp1_rtc_tasklet
 mp1_rtc_tasklet:
-		pushl %ebp
-		movl %esp, %ebp
-		pushl %ebx
-		pushl %esi
-		pushl %edi
+	pushl %ebp
+	movl %esp, %ebp
+	pushl %ebx
+	pushl %esi
+	pushl %edi
 		
-		pushl %eax    
-		call update_missiles
-		call redraw_cities
-		call redraw_crosshairs
+	pushl %eax    
+	call update_missiles
+	call update_city
+	call redraw_crosshairs
 
 
 		
-	tasklet_done:
-		popl %eax
-		popl %edi
-		popl %esi 
-		popl %ebx
-		leave
-		ret
+tasklet_done:
+	popl %eax
+	popl %edi
+	popl %esi 
+	popl %ebx
+	leave
+	ret
 
 # int mp1_ioctl(unsigned long arg, unsigned int cmd)
 # The dispatch function for the MP1 ioctls - should use the cmd argument
@@ -385,18 +385,33 @@ remove_finished:
 # ---------------------------------CROSSHAIR DRAWING---------------------------------------#
 
 redraw_crosshairs:
-
-	# initialize stack frame
+# initialize stack frame
 	pushl %ebp                 
 	movl %esp, %ebp
-	# protect callee-saved registers
+
 	pushl %ebx
 	pushl %ecx
 	pushl %edx
 	pushl %esi
 	pushl %edi
+	# memory offset = x*2 + y*80*2
+	# esi stores x
+	xorl %esi,%esi
+	movl crosshairs_x, %esi
+	# eax stores y
+	movl crosshairs_y, %eax
+	# y*80
+	imull $80, %eax
+	# x*80 + y
+	addl %esi, %eax
+	# (x*80 + y) *2
+	imull $2, %eax
+	# “+” = ascii 43
+	movb $43, %cl
 
-	
+	pushl %edx
+	call mp1_poke
+	popl %edx
 
 	popl %edi
 	popl %esi
@@ -407,6 +422,7 @@ redraw_crosshairs:
 	ret
 
 
+
 # ---------------------------------BASE DRAWING---------------------------------------#
 # three cities should be drawn in the bottom row of the screen centered in columns 20, 40, and 60
 # two five-character arrays declared in mp1.S: base_pic and dead_base pic
@@ -415,7 +431,7 @@ redraw_crosshairs:
 # base_alive [0] - base_alive [2] : zero -> dead 
 # 									non-zero ->  alive
 # The fourth byte is padding.
-redraw_cities:
+update_city:
 
 	# initialize stack frame
 	pushl %ebp                 
@@ -426,13 +442,73 @@ redraw_cities:
 	pushl %edx
 	pushl %esi
 	pushl %edi	
-		ret
+	
+	# let edx point to the start of the base_alive array
+	movl base_alive, %ebx
+	# set up city-check counter: we have 3 city to check
+	movl $3, %ecx
+city_starting_point:  # [18,24]
+	# city has y location 24
+	movl $24, %eax
+	# y * 2 * 80
+	imull $160, %eax
+	# y*2*80 + x*2
+	# eax now has the starting point
+	addl $36, %eax
+
+check_city:  
+	# check whether city is alive
+	cmpb $0, %bl
+	jne city_alive
+
+city_dead: 
+	movl dead_base_pic, %esi
+	# each city has width of 5
+	movl $5, %edx
+	jmp draw_loop
+
+city_alive: 
+	# let esi point to the start of base_pic
+	movl base_pic, %esi
+	# each city has width of 5
+	movl $5, %edx
+	jmp draw_loop
 
 
+draw_loop: 
+	# load base_pic to cl and draw
+	movb %esi, %cl
+	call mp1_poke
+	# add 2 to video memory location
+	addl $2, %eax
+	# increment base_pic
+	addl $1, %esi
+	# decrement width counter
+	subl $1, %edx
+	# check if we reach the max width
+	cmpl $0, %edx
+	je one_city_done
+	draw_loop
 
-draw_city:
+one_city_done: 
+	cmp $0, %ecx
+	je city_check_done
+	subl $1, %ecx
+	shrl $8, %ebx
+	addl $32, %eax
+	jmp check_city
 
-		ret
+
+city_check_done: 
+	popl %edi
+	popl %esi
+	popl %edx
+	popl %ecx
+	popl %ebx
+	leave
+	ret
+
+
 
 
 
@@ -440,6 +516,7 @@ mp1_ioctl_startgame:
 	movl $0, mp1_missile_list
 	movl $40, crosshairs_x		
 	movl $12, crosshairs_y 
+	movl $0xffffffff, base_alive
 	ret
 
 
@@ -598,8 +675,6 @@ below_x:
 	# x above 79, replace it with 79
 above_x: 
 	movl $79, crosshairs_x
-	# y below 0, replace it with 0
-
 
 	# bound check over, return 0
 	movl $0, %eax
