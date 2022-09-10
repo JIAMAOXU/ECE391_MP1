@@ -512,16 +512,28 @@ city_check_done:
 	leave
 	ret
 
-
-
-
-
 mp1_ioctl_startgame:
+	# initialize stack frame
+	pushl %ebp                 
+	movl %esp, %ebp
+	# protect callee-saved registers
+	pushl %ebx
+	pushl %ecx
+	pushl %edx
+	pushl %esi
+	pushl %edi
 	movl $0, mp1_missile_list
 	movl $40, crosshairs_x		
 	movl $12, crosshairs_y 
 	movl $0xffffffff, base_alive
+	popl %edi
+	popl %esi
+	popl %edx
+	popl %ecx
+	popl %ebx
+	leave
 	ret
+	
 
 
 mp1_ioctl_addmissile:
