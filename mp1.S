@@ -476,11 +476,13 @@ city_alive:
 
 
 draw_loop: 
+	pushl %eax
 	# load base_pic to cl and draw
 	movb NEXT(%esi), %cl
 	pushl %edx
 	call mp1_poke
 	popl %edx
+	popl %eax
 	# add 2 to video memory location
 	addl $2, %eax
 	# increment base_pic
