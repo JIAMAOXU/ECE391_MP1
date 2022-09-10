@@ -464,33 +464,31 @@ check_city:
 city_dead: 
 	movl dead_base_pic, %esi
 	# each city has width of 5
-	movl $5, %edx
+	movl $5, %edi
 	jmp draw_loop
 
 city_alive: 
 	# let esi point to the start of base_pic
 	movl base_pic, %esi
 	# each city has width of 5
-	movl $5, %edx
+	movl $5, %edi
 	jmp draw_loop
 
 
 draw_loop: 
-	pushl %eax
 	# load base_pic to cl and draw
 	movb NEXT(%esi), %cl
 	pushl %edx
 	call mp1_poke
 	popl %edx
-	popl %eax
 	# add 2 to video memory location
 	addl $2, %eax
 	# increment base_pic
 	addl $1, %esi
 	# decrement width counter
-	subl $1, %edx
+	subl $1, %edi
 	# check if we reach the max width
-	cmpl $0, %edx
+	cmpl $0, %edi
 	je one_city_done
 	jmp draw_loop
 
@@ -498,7 +496,9 @@ one_city_done:
 	cmp $0, %ecx
 	je city_check_done
 	subl $1, %ecx
+	# base alive increment
 	shrl $8, %ebx
+	# video location move to next base
 	addl $32, %eax
 	jmp check_city
 
