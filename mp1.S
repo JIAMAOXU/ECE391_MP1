@@ -87,9 +87,6 @@ mp1_rtc_tasklet:
 		call redraw_crosshairs
 
 
-		cmpl $0,%eax
-		je tasklet_done
-		call mp1_notify_user
 		
 	tasklet_done:
 		popl %eax
@@ -111,23 +108,23 @@ mp1_rtc_tasklet:
 .globl mp1_ioctl
 mp1_ioctl:
 
-		movl 8(%esp),%eax
-		cmpl $0, %eax
-		jb error
-		cmpl $4, %eax
-		ja error
-		jmp *jump_table(,%eax,4)
+	movl 8(%esp),%eax
+	cmpl $0, %eax
+	jb error
+	cmpl $4, %eax
+	ja error
+	jmp *jump_table(,%eax,4)
 
-	invalid_cmd:		
-		movl $-1, %eax			
-		ret
+invalid_cmd:		
+	movl $-1, %eax			
+	ret
 
 jump_table:
-		.long mp1_ioctl_startgame,mp1_ioctl_addmissile,mp1_ioctl_movexhairs,mp1_ioctl_getstatus,mp1_ioctl_endgame
+	.long mp1_ioctl_startgame,mp1_ioctl_addmissile,mp1_ioctl_movexhairs,mp1_ioctl_getstatus,mp1_ioctl_endgame
 
 
 
-# ----------------- Functions private to this file -------------------
+# ----------------------- Functions private to this file -------------------------#
 
 update_missiles:
 	# initialize stack frame
@@ -205,13 +202,22 @@ exploding:
 	pushl %ecx
 	call missile_explode	
 	# check the return value of explode function
-			
+	popl %ecx
+	popl %edx
+	popl %eax
+	cmpl $0,%eax
+	je decrement
+	# eax return non-zero, we have to notify user
+	pushl %eax
+	pushl %edx
+	pushl %ecx
+	call mp1_notify_user
 	popl %ecx
 	popl %edx
 	popl %eax
 
 # tasklet decrement; when it reaches zero the explosion is over
-# decrement 
+decrement: 
 	subl $1, EXPLODED(%ecx)
 	cmpl $0, EXPLODED (%ecx)
 	jne draw_explode
@@ -262,7 +268,6 @@ traversal_done:
 	leave
 	ret
 
-
 missile_position:
 	# initialize stack frame
 	pushl %ebp
@@ -304,7 +309,6 @@ missile_position:
 
 	leave 
 	ret
-
 
 # ---------------------------------ERASE FROM LIST---------------------------------------#
 erase_from_list:
@@ -378,14 +382,40 @@ remove_finished:
 	popl %esi
 	leave
 	ret
-
-redraw_cities:
-		
-		ret
-
-
+# ---------------------------------CROSSHAIR DRAWING---------------------------------------#
 
 redraw_crosshairs:
+
+	# initialize stack frame
+	pushl %ebp                 
+	movl %esp, %ebp
+	# protect callee-saved registers
+	pushl %ebx
+	pushl %ecx
+	pushl %edx
+	pushl %esi
+	pushl %edi
+
+	
+
+	popl %edi
+	popl %esi
+	popl %edx
+	popl %ecx
+	popl %ebx
+	leave
+	ret
+
+
+# ---------------------------------BASE DRAWING---------------------------------------#
+# three cities should be drawn in the bottom row of the screen centered in columns 20, 40, and 60
+# two five-character arrays declared in mp1.S: base_pic and dead_base pic
+# first city: five video locations from (18,24) to (22, 24)
+# base alive array: indicates whether each city has been destroyed
+# base_alive [0] - base_alive [2] : zero -> dead 
+# 									non-zero ->  alive
+# The fourth byte is padding.
+redraw_cities:
 
 	# initialize stack frame
 	pushl %ebp                 
@@ -395,33 +425,16 @@ redraw_crosshairs:
 	pushl %ecx
 	pushl %edx
 	pushl %esi
-	pushl %edi
-	# memory offset = x*2 + y*80*2
-	# esi stores x
-	xorl %esi,%esi
-	movl crosshairs_x, %esi
-	# eax stores y
-	movl crosshairs_y, %eax
-	# y*80
-	imull $80, %eax
-	# x*80 + y
-	addl %esi, %eax
-	# (x*80 + y) *2
-	imull $2, %eax
-	# “+” = ascii 43
-	movb $43, %cl
+	pushl %edi	
+		ret
 
-	pushl %edx
-	call mp1_poke
-	popl %edx
 
-	popl %edi
-	popl %esi
-	popl %edx
-	popl %ecx
-	popl %ebx
-	leave
-	ret
+
+draw_city:
+
+		ret
+
+
 
 mp1_ioctl_startgame:
 	movl $0, mp1_missile_list
@@ -656,9 +669,4 @@ gameover:
 	popl %ebx
 	movl $0, %eax
 	leave
-		ret
-		
-
-draw_city:
-
 		ret
