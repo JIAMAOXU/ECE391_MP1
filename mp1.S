@@ -477,7 +477,7 @@ city_alive:
 
 draw_loop: 
 	# load base_pic to cl and draw
-	movb NEXT(%esi), %cl
+	movb %esi, %cl
 	pushl %edx
 	call mp1_poke
 	popl %edx
@@ -525,7 +525,7 @@ mp1_ioctl_startgame:
 	movl $0, mp1_missile_list
 	movl $40, crosshairs_x		
 	movl $12, crosshairs_y 
-	movl $0xffffffff, base_alive
+	movl $0xFFFFFFFF, base_alive
 	popl %edi
 	popl %esi
 	popl %edx
