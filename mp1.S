@@ -200,7 +200,7 @@ exploding:
 	pushl %eax
 	pushl %edx
 	pushl %ecx
-	call missile_explode	
+	call missile_explode	 
 	# check the return value of explode function
 	popl %ecx
 	popl %edx
@@ -385,10 +385,10 @@ remove_finished:
 # ---------------------------------CROSSHAIR DRAWING---------------------------------------#
 
 redraw_crosshairs:
-# initialize stack frame
+	# initialize stack frame
 	pushl %ebp                 
 	movl %esp, %ebp
-
+	# protect callee-saved registers
 	pushl %ebx
 	pushl %ecx
 	pushl %edx
@@ -432,103 +432,151 @@ redraw_crosshairs:
 # 									non-zero ->  alive
 # The fourth byte is padding.
 update_city:
-
 	# initialize stack frame
-	pushl %ebp                 
-	movl %esp, %ebp
-
-	pushl %ebx
-	pushl %ecx
-	pushl %edx
-	pushl %esi
-	pushl %edi	
-	
-	# let edx point to the start of the base_alive array
-	movl base_alive, %ebx
-	# set up city-check counter: we have 3 city to check
-	movl $3, %ecx
-city_starting_point:  # [18,24]
-	# city has y location 24
-	movl $24, %eax
-	# y * 2 * 80
-	imull $160, %eax
-	# y*2*80 + x*2
-	# eax now has the starting point
-	addl $36, %eax
-
-check_city:  
-	# check whether city is alive
-	cmpb $0, %bl
-	jne city_alive
-
-city_dead: 
-	movl $dead_base_pic, %esi
-	# each city has width of 5
-	movl $5, %edi
-	jmp draw_loop
-
-city_alive: 
-	# let esi point to the start of base_pic
-	movl $base_pic, %esi
-	# each city has width of 5
-	movl $5, %edi
-	jmp draw_loop
-
-
-draw_loop: 
-	# load base_pic to cl and draw
-	movb NEXT(%esi), %cl
-	call mp1_poke
-	# add 2 to video memory location
-	addl $2, %eax
-	# increment base_pic
-	addl $1, %esi
-	# decrement width counter
-	subl $1, %edi
-	# check if we reach the max width
-	cmpl $0, %edi
-	je one_city_done
-	jmp draw_loop
-
-one_city_done: 
-	cmp $0, %ecx
-	je city_check_done
-	subl $1, %ecx
-	# base alive increment
-	shrl $8, %ebx
-	# video location move to next base
-	addl $32, %eax
-	jmp check_city
-
-
-city_check_done: 
-	popl %edi
-	popl %esi
-	popl %edx
-	popl %ecx
-	popl %ebx
-	leave
-	ret
-
-mp1_ioctl_startgame:
-	# initialize stack frame
-	pushl %ebp                 
-	movl %esp, %ebp
+	pushl %ebp
+    movl %esp, %ebp
 	# protect callee-saved registers
 	pushl %ebx
 	pushl %ecx
 	pushl %edx
 	pushl %esi
-	pushl %edi
-	movl $0, mp1_missile_list
-	movl $40, crosshairs_x		
-	movl $12, crosshairs_y 
-	movl $0xFFFFFFFF, base_alive
+	pushl %edi	
+	# let ecx point to the start of the base_alive
+	movl base_alive, %ecx                                  
+
+check_1st_city: 
+	# each base has width of 5, use ecx decrement for checking
+    movl $5, %ebx      
+	# Base on has location [18,24], move edx to the leftmost point                                     
+    movl $18, %edx  
+	# clear esi and store alive base image "base_pic"                                         
+	leal base_pic, %esi     
+	# compare 0 and base_alive                              
+	cmpb $0, %cl 
+	jne draw_1st_city
+	# base_alive == 0 meanse city is dead, then load the dead image
+	# load the dead image              
+    leal dead_base_pic, %edi 
+	movl %edi, %esi
+
+draw_1st_city: 
+	# memory offset = x*2 + y*80*2
+	# in this case, memory location is 18*2+24*80*2
+    xorl %eax, %eax                                                 
+    movl %edx, %eax 
+	imull $2, %eax   
+	# draw the image by calling cl and mp1 poke    
+	# 3840 = 24*80*2                            
+    addl $3840, %eax  
+	movb (%esi), %cl                                      
+    pushl %edx
+    call mp1_poke											
+    popl %edx
+	# decrement width by 1
+	subl $1, %ebx
+	# increament memory location by 1
+    addl $1, %edx  
+	# increament base_pic by 1                                  
+    addl $1, %esi    
+	# stop drawing until 5                                           
+    cmpl $0, %ebx
+    jne draw_1st_city
+    
+check_2nd_city:     
+	# each base has width of 5, use ecx decrement for checking
+    movl $5, %ebx
+	# Base on has location [38,24], move edx to the leftmost point
+    movl $38, %edx
+	# clear esi and store alive base image "base_pic"                                         
+    leal base_pic, %esi 
+	# find next "base_alive" by shift 1 byte
+	shrl $8, %ecx 
+	# compare 0 and base_alive                                                                                                      
+	cmpb $0, %cl
+	jne draw_2nd_city
+	# base_alive == 0 meanse city is dead, then load the dead image
+	# load the dead image 
+	xorl %esi, %esi
+    leal dead_base_pic, %edi   
+	movl %edi, %esi
+
+draw_2nd_city: 
+	# memory offset = x*2 + y*80*2
+	# in this case, memory location is 38*2+24*80*2
+    xorl %eax, %eax                                                 
+    movl %edx, %eax 
+	imull $2, %eax 
+	# draw the image by calling cl and mp1 poke    
+	# 3840 = 24*80*2                                                                  
+    addl $3840, %eax  
+	movb (%esi), %cl                                      
+    pushl %edx
+    call mp1_poke											
+    popl %edx
+	# decrement width by 1
+	subl $1, %ebx
+	# increament memory location by 1
+    addl $1, %edx  
+	# increament base_pic by 1                                  
+    addl $1, %esi    
+	# stop drawing until 5                                           
+    cmpl $0, %ebx
+    jne draw_2nd_city
+    
+check_3rd_city:    
+	# each base has width of 5, use ecx decrement for checking
+    movl $5, %ebx
+	# Base on has location [58,24], move edx to the leftmost point
+    movl $58, %edx
+	# clear esi and store alive base image "base_pic"                                         
+    leal base_pic, %esi 
+	# find next "base_alive" by shift 1 byte
+    shrl $8, %ecx      
+	# compare 0 and base_alive                                                                                                                                         
+    cmpb $0, %cl
+	jne draw_3rd_city
+	# base_alive == 0 meanse city is dead, then load the dead image
+	# load the dead image 
+    leal dead_base_pic, %edi   
+	movl %edi, %esi
+
+draw_3rd_city: 
+	# memory offset = x*2 + y*80*2
+	# in this case, memory location is 58*2+24*80*2
+    xorl %eax, %eax                                                 
+    movl %edx, %eax 
+	imull $2, %eax    
+	# draw the image by calling cl and mp1 poke   
+	# 3840 = 24*80*2                                                                                                    
+    addl $3840, %eax  
+	movb (%esi), %cl                                      
+    pushl %edx
+    call mp1_poke											
+    popl %edx
+	# decrement width by 1
+	subl $1, %ebx
+	# increament memory location by 1
+    addl $1, %edx  
+	# increament base_pic by 1                                  
+    addl $1, %esi    
+	# stop drawing until 5                                           
+    cmpl $0, %ebx
+    jne draw_3rd_city
+    
 	popl %edi
 	popl %esi
 	popl %edx
 	popl %ecx
 	popl %ebx
+    leave
+    ret
+
+mp1_ioctl_startgame:
+
+	movl $0, mp1_missile_list
+	movl $40, crosshairs_x		
+	movl $12, crosshairs_y 
+	movl $0xFFFFFFFF, base_alive
 	leave
 	ret
 	
@@ -720,10 +768,91 @@ check_done:
 
 
 mp1_ioctl_getstatus:
-		
-		ret 
 
-				
+	pushl %ebp
+	movl %esp, %ebp
+	pushl %esi
+	pushl %ebx
+	pushl %edi
+	pushl %edx 
+	pushl %ecx
+
+	# city is currently alive, the corresponding bit should be a 1
+	# city has been destroyed, the bit should be 0	
+	# initialize ecx to store city status
+	xorl %ecx, %ecx	
+	
+check_1st_city_status: 
+	# load the base_alive array into eax
+	movl base_alive, %eax
+	# check if the first city is alive
+	movl $0x000000ff, %ebx	
+	andl %ebx, %eax		
+	cmpl $0, %eax
+	# city alive, corresponding bit should be 1
+	# otherwise, jump for next city
+	je check_2nd_city_status
+	# add 1 to the first bit of ecx
+	addl $1, %ecx
+	
+check_2nd_city_status:
+	# load the base_alive array into eax
+	movl base_alive, %eax	
+	# check if the first city is alive		
+	movl $0x0000ff00, %ebx
+	andl %ebx, %eax		
+	cmpl $0, %eax
+	# city alive, corresponding bit should be 1
+	# otherwise, jump for next city
+	je check_3rd_city_status
+	# add 1 to the second bit of ecx		
+	addl $2, %ecx			
+
+check_3rd_city_status:
+	# load the base_alive array into eax
+	movl base_alive, %eax
+	# check if the first city is alive
+	movl $0x00ff0000, %ebx	
+	andl %ebx, %eax
+	cmpl $0, %eax
+	# city alive, corresponding bit should be 1
+	# otherwise, jump for next city
+	je update_score
+	# add 1 to the third bit of ecx
+	addl $4, %ecx		
+
+update_score:
+	# shift left by 16, so the 3 bit  will be on 16th, 17th, 18th place
+	shll $16, %ecx
+	# insert mp1_score to the lower 16 bit 
+	movw mp1_score, %cx
+	movl %ecx, score
+	# unsigned long mp1 copy to user (void *to, const void *from, unsigned long n);
+	# "unsigned long n"
+	pushl $4	
+	# "const void *from	""				
+	pushl $score
+	# "void *to"
+	pushl 8(%ebp)
+	call mp1_copy_to_user
+	addl $12,%esp  	
+	# check the return value of mp1_copy_to_user				
+	cmpl $0,%eax
+	# sucess then jump to done
+	je getstatus_done
+	# copy failed, return -1
+	movl $-1,%eax
+
+getstatus_done:
+	popl %ecx
+	popl %edx 
+	popl %edi 
+	popl %ebx
+	popl %esi
+	leave 
+	ret 
+
+	
 mp1_ioctl_endgame:
 # initialize stack frame
 	pushl %ebp                 
@@ -758,4 +887,4 @@ gameover:
 	popl %ebx
 	movl $0, %eax
 	leave
-		ret
+	ret
