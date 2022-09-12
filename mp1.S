@@ -40,7 +40,7 @@ base_pic:     	    .string "/^^^\\"	# Picture of a live base
 dead_base_pic: 	    .string "xxxxx"		# Picture of a dead base
 crosshairs_x:		.long 0x0			# X-position of the crosshairs
 crosshairs_y:		.long 0x0			# Y-position of the crosshairs
-score:			.long 0x0	# Player's current score
+score:				.long 0x0			# Player's current score
 
 .text
 
@@ -124,7 +124,7 @@ mp1_ioctl:
 	# cmd error happend, return -1
 error:		
 	movl $-1, %eax	
-	leave		
+	leave 		
 	ret
 
 jumptable:
@@ -605,11 +605,11 @@ mp1_ioctl_addmissile:
 	pushl %ebp
 	movl %esp, %ebp
 	# protect callee-saved registers
-	pushl %esi
 	pushl %ebx
-	pushl %edi
 	pushl %ecx
 	pushl %edx
+	pushl %esi
+	pushl %edi
 	# let ecx point to the struct
 	movl 8(%ebp),%ebx	
 
@@ -647,11 +647,11 @@ mp1_ioctl_addmissile:
 	# no error, return 0
 	movl $0,%eax				  
 	
-	popl %edx	
-	popl %ecx 
-	popl %edi 
-	popl %ebx
+	popl %edi
 	popl %esi
+	popl %edx
+	popl %ecx
+	popl %ebx
 	leave
 	ret
 
@@ -668,11 +668,11 @@ copy_failed:
 	# copy error, return -1 to eax			
 	movl $-1,%eax				
 	
-	popl %edx	
-	popl %ecx 
-	popl %edi 
-	popl %ebx
+	popl %edi
 	popl %esi
+	popl %edx
+	popl %ecx
+	popl %ebx
 	leave
 	ret
 
@@ -786,11 +786,11 @@ mp1_ioctl_getstatus:
 
 	pushl %ebp
 	movl %esp, %ebp
-	pushl %esi
 	pushl %ebx
-	pushl %edi
-	pushl %edx 
 	pushl %ecx
+	pushl %edx
+	pushl %esi
+	pushl %edi
 
 	# city is currently alive, the corresponding bit should be a 1
 	# city has been destroyed, the bit should be 0	
@@ -859,11 +859,11 @@ update_score:
 	movl $-1,%eax
 
 getstatus_done:
-	popl %ecx
-	popl %edx 
-	popl %edi 
-	popl %ebx
+	popl %edi
 	popl %esi
+	popl %edx
+	popl %ecx
+	popl %ebx
 	leave 
 	ret 
 
