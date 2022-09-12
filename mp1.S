@@ -123,7 +123,8 @@ mp1_ioctl:
 	
 	# cmd error happend, return -1
 error:		
-	movl $-1, %eax			
+	movl $-1, %eax	
+	leave		
 	ret
 
 jumptable:
